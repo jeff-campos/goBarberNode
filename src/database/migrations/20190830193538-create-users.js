@@ -11,7 +11,7 @@ module.exports = {
       allowNull: false,
     },
     email: {
-      type: Sequelize.STRING, // Tipo Sting
+      type: Sequelize.STRING, // Tipo string
       allowNull: false,
       unique: true,
     },
