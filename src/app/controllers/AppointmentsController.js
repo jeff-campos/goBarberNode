@@ -52,17 +52,20 @@ class AppointmentsController {
     const { provider_id, date } = req.body;
 
     /**
-     * Check if provider_id is provider
+     * Check if provider_id is provider,
+     * and if provider tries to schedule appointment
      */
-
     const checkIsProvider = await User.findOne({
       where: { id: provider_id, provider: true },
     });
-
     if (!checkIsProvider) {
       return res
         .status(400)
         .json({ error: 'You can only create appointments with providers' });
+    } if (provider_id === req.userId) {
+      return res
+        .status(400)
+        .json({ error: 'You cannot create a schedule' });
     }
 
     /**
