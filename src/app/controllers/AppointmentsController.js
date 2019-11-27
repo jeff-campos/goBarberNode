@@ -7,6 +7,7 @@ import Appointments from '../models/Appointments';
 import Notification from '../schemas/Notification';
 import User from '../models/User';
 import File from '../models/File';
+import Mail from '../../Lib/Mail';
 
 class AppointmentsController {
   /**
@@ -122,7 +123,16 @@ class AppointmentsController {
   }
 
   async delete(req, res) {
-    const appointment = await Appointments.findByPk(req.params.id);
+    const appointment = await Appointments.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: 'provider',
+          attributes: ['name', 'email'],
+        },
+      ],
+    });
+
     if (appointment.user_id !== req.userId) {
       return res.status(401).json({
         error: "You dont't have permission to cancel this appointments.",
@@ -135,9 +145,16 @@ class AppointmentsController {
         error: 'You can ony cancel appointments 2 hours in advance.',
       });
     }
-    appointment.canceled_at = new Date();
+
+    appointment.canceled_at = '2019-11-26T00:00:00.000Z';
+
     await appointment.save();
 
+    await Mail.sendMail({
+      to: `${appointment.provider.name} <${appointment.provider.email}>`,
+      subject: `Agendamento cancelado de ${appointment.provider.name}`,
+      text: 'Você tem um novo agendamento',
+    });
 
     return res.json(appointment);
   }
