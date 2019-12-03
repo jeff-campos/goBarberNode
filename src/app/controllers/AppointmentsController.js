@@ -1,12 +1,15 @@
 import * as Yup from 'yup';
 import {
-  startOfHour, parseISO, isBefore, format,
+  startOfHour, parseISO, isBefore, format, subHours,
 } from 'date-fns';
 import pt from 'date-fns/locale/pt';
 import Appointments from '../models/Appointments';
 import Notification from '../schemas/Notification';
 import User from '../models/User';
 import File from '../models/File';
+
+import Queue from '../../Lib/Queue';
+import CancellationMail from '../jobs/CancellationMail';
 
 class AppointmentsController {
   /**
@@ -52,17 +55,20 @@ class AppointmentsController {
     const { provider_id, date } = req.body;
 
     /**
-     * Check if provider_id is provider
+     * Check if provider_id is provider,
+     * and if provider tries to schedule appointment
      */
-
     const checkIsProvider = await User.findOne({
       where: { id: provider_id, provider: true },
     });
-
     if (!checkIsProvider) {
       return res
         .status(400)
         .json({ error: 'You can only create appointments with providers' });
+    } if (provider_id === req.userId) {
+      return res
+        .status(400)
+        .json({ error: 'You cannot create a schedule' });
     }
 
     /**
@@ -116,6 +122,46 @@ class AppointmentsController {
 
 
     return res.json(appointments);
+  }
+
+  async delete(req, res) {
+    const appointment = await Appointments.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: 'provider',
+          attributes: ['name', 'email'],
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name'],
+        },
+      ],
+    });
+
+    if (appointment.user_id !== req.userId) {
+      return res.status(401).json({
+        error: "You dont't have permission to cancel this appointments.",
+      });
+    }
+
+    const dateWithSub = subHours(appointment.date, 2);
+    if (isBefore(dateWithSub, new Date())) {
+      return res.status(401).json({
+        error: 'You can ony cancel appointments 2 hours in advance.',
+      });
+    }
+
+    appointment.canceled_at = '2019-11-01T15:00:00.000Z';
+
+    await appointment.save();
+
+    await Queue.add(CancellationMail.key, {
+      appointment,
+    });
+
+    return res.json(appointment);
   }
 }
 
